@@ -1,0 +1,10 @@
+# Compiled Java files
+*.class
+
+# Database files
+*.db
+*.sqlite
+
+# OS files
+.DS_Store
+Thumbs.db
