@@ -271,8 +271,8 @@ public class Studentinfosystem extends JFrame {
         totalLabel.setFont(FONT_PAGE);    totalLabel.setForeground(TEXT_MUTED);
         pageInfoLabel.setFont(FONT_PAGE); pageInfoLabel.setForeground(TEXT_DARK);
 
-        prevBtn = ghostButton("← Prev");
-        nextBtn = ghostButton("Next →");
+        prevBtn = ghostButton("Prev");
+        nextBtn = ghostButton("Next");
         prevBtn.setPreferredSize(new Dimension(85, 30));
         nextBtn.setPreferredSize(new Dimension(85, 30));
 
@@ -293,7 +293,7 @@ public class Studentinfosystem extends JFrame {
     private void updatePaginationBar() {
         int from = totalRecords == 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
         int to   = Math.min(currentPage * PAGE_SIZE, totalRecords);
-        totalLabel.setText("Showing " + from + "–" + to + " of " + totalRecords + " students");
+        totalLabel.setText("Showing " + from + " to " + to + " of " + totalRecords + " students");
         pageInfoLabel.setText("Page " + currentPage + " of " + totalPages);
         prevBtn.setEnabled(currentPage > 1);
         nextBtn.setEnabled(currentPage < totalPages);
@@ -604,12 +604,14 @@ public class Studentinfosystem extends JFrame {
 
             model.setRowCount(0);
             while (dr.next()) {
+                String prog = dr.getString("program");
+                String coll = dr.getString("college");
                 model.addRow(new Object[]{
                     dr.getString("id"),
                     dr.getString("firstname"),
                     dr.getString("lastname"),
-                    dr.getString("program"),
-                    dr.getString("college"),
+                    (prog == null || prog.isEmpty()) ? "NOT ENROLLED" : prog,
+                    (coll == null || coll.isEmpty()) ? "N/A" : coll,
                     dr.getString("year"),
                     dr.getString("gender")
                 });
@@ -866,26 +868,30 @@ public class Studentinfosystem extends JFrame {
 
         for (College c : readColleges()) collModel.addRow(c.toArray());
 
-        collTable.getSelectionModel().addListSelectionListener(e -> {
-            int row = collTable.getSelectedRow();
-            if (!e.getValueIsAdjusting() && row != -1) {
-                int mr = collTable.convertRowIndexToModel(row);
-                codeField.setText((String) collModel.getValueAt(mr, 0));
-                nameField.setText((String) collModel.getValueAt(mr, 1));
-            }
-        });
-
         JScrollPane scroll = new JScrollPane(collTable);
         scroll.setBorder(BorderFactory.createEmptyBorder());
         scroll.getViewport().setBackground(SURFACE);
 
         JButton addBtn    = accentButton("Add");
+        JButton editBtn   = accentButton("Edit");
         JButton deleteBtn = ghostButton("Delete");
         JButton closeBtn  = ghostButton("Close");
         JPanel btnPanel   = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 10));
         btnPanel.setBackground(BG);
         btnPanel.setBorder(new MatteBorder(1, 0, 0, 0, BORDER_COL));
-        btnPanel.add(addBtn); btnPanel.add(deleteBtn); btnPanel.add(closeBtn);
+        btnPanel.add(addBtn); btnPanel.add(editBtn); btnPanel.add(deleteBtn); btnPanel.add(closeBtn);
+
+        // Track which college code was selected from the table
+        final String[] selectedCollegeCode = {""};
+        collTable.getSelectionModel().addListSelectionListener(e -> {
+            int row = collTable.getSelectedRow();
+            if (!e.getValueIsAdjusting() && row != -1) {
+                int mr = collTable.convertRowIndexToModel(row);
+                selectedCollegeCode[0] = (String) collModel.getValueAt(mr, 0);
+                codeField.setText(selectedCollegeCode[0]);
+                nameField.setText((String) collModel.getValueAt(mr, 1));
+            }
+        });
 
         addBtn.addActionListener(e -> {
             String code  = codeField.getText().trim().toUpperCase();
@@ -903,28 +909,132 @@ public class Studentinfosystem extends JFrame {
                 PreparedStatement ps = conn.prepareStatement("INSERT INTO college (code,name) VALUES (?,?)");
                 ps.setString(1, code); ps.setString(2, cname); ps.executeUpdate();
                 collModel.addRow(new College(code, cname).toArray());
-                codeField.setText(""); nameField.setText("");
+                codeField.setText(""); nameField.setText(""); selectedCollegeCode[0] = "";
             } catch (SQLException ex) { JOptionPane.showMessageDialog(dialog, "Error: " + ex.getMessage()); }
+        });
+
+        editBtn.addActionListener(e -> {
+            String oldCode = selectedCollegeCode[0];
+            if (oldCode.isEmpty()) { JOptionPane.showMessageDialog(dialog, "Select a college to edit first."); return; }
+
+            // Fetch current college name from DB
+            String currentName = nameField.getText().trim();
+
+            // Build edit popup — same style as Edit Student
+            JDialog editDialog = new JDialog(dialog, "Edit College — " + oldCode, true);
+            editDialog.setSize(380, 240);
+            editDialog.setResizable(false);
+            editDialog.setLocationRelativeTo(dialog);
+            editDialog.setLayout(new BorderLayout());
+            editDialog.getContentPane().setBackground(BG);
+
+            JPanel editHeader = new JPanel(new BorderLayout());
+            editHeader.setBackground(ACCENT);
+            editHeader.setBorder(BorderFactory.createEmptyBorder(10, 18, 10, 18));
+            JLabel editHeaderLbl = new JLabel("Editing College: " + oldCode);
+            editHeaderLbl.setFont(FONT_BTN);
+            editHeaderLbl.setForeground(Color.WHITE);
+            editHeader.add(editHeaderLbl, BorderLayout.WEST);
+
+            JTextField dCode = styledField();
+            JTextField dName = styledField();
+            dCode.setText(oldCode);
+            dName.setText(currentName);
+
+            JPanel editGrid = new JPanel(new GridBagLayout());
+            editGrid.setBackground(SURFACE);
+            editGrid.setBorder(BorderFactory.createEmptyBorder(16, 24, 16, 24));
+            GridBagConstraints egbc = new GridBagConstraints();
+            egbc.insets = new Insets(6, 6, 6, 6);
+            egbc.fill = GridBagConstraints.HORIZONTAL;
+            egbc.anchor = GridBagConstraints.WEST;
+
+            egbc.gridx = 0; egbc.weightx = 0;
+            egbc.gridy = 0; editGrid.add(styledLabel("College Code"), egbc);
+            egbc.gridy = 1; editGrid.add(styledLabel("College Name"), egbc);
+            egbc.gridx = 1; egbc.weightx = 1.0;
+            egbc.gridy = 0; editGrid.add(dCode, egbc);
+            egbc.gridy = 1; editGrid.add(dName, egbc);
+
+            JButton saveBtn   = accentButton("Save");
+            JButton cancelBtn = ghostButton("Cancel");
+            JPanel editBtnPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 10));
+            editBtnPanel.setBackground(BG);
+            editBtnPanel.setBorder(new MatteBorder(1, 0, 0, 0, BORDER_COL));
+            editBtnPanel.add(saveBtn); editBtnPanel.add(cancelBtn);
+
+            saveBtn.addActionListener(ev -> {
+                String newCode = dCode.getText().trim().toUpperCase();
+                String newName = dName.getText().trim();
+                if (newCode.isEmpty() || newName.isEmpty()) { JOptionPane.showMessageDialog(editDialog, "Please fill in all fields."); return; }
+                if (!newCode.matches("[A-Z]+")) { JOptionPane.showMessageDialog(editDialog, "College Code must contain letters only!"); return; }
+                if (newCode.length() < 2 || newCode.length() > 10) { JOptionPane.showMessageDialog(editDialog, "College Code must be 2–10 letters long!"); return; }
+                if (!newName.matches("[a-zA-Z ]+")) { JOptionPane.showMessageDialog(editDialog, "College Name must contain letters only!"); return; }
+                if (newName.trim().length() < 5) { JOptionPane.showMessageDialog(editDialog, "College Name is too short!"); return; }
+                if (!newCode.equals(oldCode)) {
+                    try (Connection conn = DatabaseManager.getConnection()) {
+                        PreparedStatement chk = conn.prepareStatement("SELECT code FROM college WHERE code=?");
+                        chk.setString(1, newCode);
+                        if (chk.executeQuery().next()) { JOptionPane.showMessageDialog(editDialog, "College code already exists!"); return; }
+                    } catch (SQLException ex) { JOptionPane.showMessageDialog(editDialog, "Error: " + ex.getMessage()); return; }
+                }
+                try (Connection conn = DatabaseManager.getConnection()) {
+                    conn.createStatement().execute("PRAGMA foreign_keys = OFF");
+                    conn.setAutoCommit(false);
+                    PreparedStatement updStudents = conn.prepareStatement("UPDATE student SET college=? WHERE college=?");
+                    updStudents.setString(1, newCode); updStudents.setString(2, oldCode); updStudents.executeUpdate();
+                    PreparedStatement updPrograms = conn.prepareStatement("UPDATE program SET college=? WHERE college=?");
+                    updPrograms.setString(1, newCode); updPrograms.setString(2, oldCode); updPrograms.executeUpdate();
+                    PreparedStatement updCollege = conn.prepareStatement("UPDATE college SET code=?, name=? WHERE code=?");
+                    updCollege.setString(1, newCode); updCollege.setString(2, newName); updCollege.setString(3, oldCode); updCollege.executeUpdate();
+                    conn.commit();
+                    conn.setAutoCommit(true);
+                    conn.createStatement().execute("PRAGMA foreign_keys = ON");
+                    collModel.setRowCount(0);
+                    for (College c : readColleges()) collModel.addRow(c.toArray());
+                    codeField.setText(""); nameField.setText(""); selectedCollegeCode[0] = "";
+                    loadStudents();
+                    editDialog.dispose();
+                    JOptionPane.showMessageDialog(dialog, "College updated successfully!");
+                } catch (SQLException ex) { JOptionPane.showMessageDialog(editDialog, "Error: " + ex.getMessage()); }
+            });
+
+            cancelBtn.addActionListener(ev -> editDialog.dispose());
+            editDialog.add(editHeader,   BorderLayout.NORTH);
+            editDialog.add(editGrid,     BorderLayout.CENTER);
+            editDialog.add(editBtnPanel, BorderLayout.SOUTH);
+            editDialog.setVisible(true);
         });
 
         deleteBtn.addActionListener(e -> {
             String code = codeField.getText().trim().toUpperCase();
             if (code.isEmpty()) { JOptionPane.showMessageDialog(dialog, "Select a college to delete."); return; }
+            int confirm = JOptionPane.showConfirmDialog(dialog,
+                "Delete college " + code + "?\nAll programs under it will be deleted.\nStudents in those programs will be set to NOT ENROLLED.",
+                "Confirm", JOptionPane.YES_NO_OPTION);
+            if (confirm != JOptionPane.YES_OPTION) return;
             try (Connection conn = DatabaseManager.getConnection()) {
-                PreparedStatement chk = conn.prepareStatement("SELECT COUNT(*) FROM program WHERE college=?");
-                chk.setString(1, code);
-                ResultSet rs = chk.executeQuery(); rs.next();
-                if (rs.getLong(1) > 0) {
-                    JOptionPane.showMessageDialog(dialog,
-                        "Cannot delete — programs still use this college.\nRemove those programs first."); return;
-                }
-                int confirm = JOptionPane.showConfirmDialog(dialog, "Delete college " + code + "?", "Confirm", JOptionPane.YES_NO_OPTION);
-                if (confirm != JOptionPane.YES_OPTION) return;
-                PreparedStatement ps = conn.prepareStatement("DELETE FROM college WHERE code=?");
-                ps.setString(1, code); ps.executeUpdate();
+                conn.createStatement().execute("PRAGMA foreign_keys = OFF");
+                conn.setAutoCommit(false);
+                // 1. Null out program+college on students under this college
+                PreparedStatement nullStudents = conn.prepareStatement(
+                    "UPDATE student SET program=NULL, college=NULL WHERE college=?");
+                nullStudents.setString(1, code); nullStudents.executeUpdate();
+                // 2. Delete programs under this college (can't set college=NULL, it's NOT NULL)
+                PreparedStatement delPrograms = conn.prepareStatement(
+                    "DELETE FROM program WHERE college=?");
+                delPrograms.setString(1, code); delPrograms.executeUpdate();
+                // 3. Delete the college itself
+                PreparedStatement delCollege = conn.prepareStatement(
+                    "DELETE FROM college WHERE code=?");
+                delCollege.setString(1, code); delCollege.executeUpdate();
+                conn.commit();
+                conn.setAutoCommit(true);
+                conn.createStatement().execute("PRAGMA foreign_keys = ON");
                 collModel.setRowCount(0);
                 for (College c : readColleges()) collModel.addRow(c.toArray());
                 codeField.setText(""); nameField.setText("");
+                loadStudents();
             } catch (SQLException ex) { JOptionPane.showMessageDialog(dialog, "Error: " + ex.getMessage()); }
         });
 
@@ -979,6 +1089,18 @@ public class Studentinfosystem extends JFrame {
 
         for (Program p : readPrograms()) progModel.addRow(p.toArray());
 
+        JScrollPane scroll = new JScrollPane(progTable);
+        scroll.setBorder(BorderFactory.createEmptyBorder()); scroll.getViewport().setBackground(SURFACE);
+
+        JButton addBtn    = accentButton("Add");
+        JButton editProgBtn = accentButton("Edit");
+        JButton deleteBtn = ghostButton("Delete");
+        JButton closeBtn  = ghostButton("Close");
+        JPanel btnPanel   = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 10));
+        btnPanel.setBackground(BG); btnPanel.setBorder(new MatteBorder(1, 0, 0, 0, BORDER_COL));
+        btnPanel.add(addBtn); btnPanel.add(editProgBtn); btnPanel.add(deleteBtn); btnPanel.add(closeBtn);
+
+        final String[] selectedProgCode = {""};
         progTable.getSelectionModel().addListSelectionListener(e -> {
             int row = progTable.getSelectedRow();
             if (!e.getValueIsAdjusting() && row != -1) {
@@ -986,20 +1108,11 @@ public class Studentinfosystem extends JFrame {
                 String colCode = (String) progModel.getValueAt(mr, 0);
                 for (int i = 0; i < collegeCombo.getItemCount(); i++)
                     if (collegeCombo.getItemAt(i).startsWith(colCode)) { collegeCombo.setSelectedIndex(i); break; }
-                codeField.setText((String) progModel.getValueAt(mr, 1));
+                selectedProgCode[0] = (String) progModel.getValueAt(mr, 1);
+                codeField.setText(selectedProgCode[0]);
                 nameField.setText((String) progModel.getValueAt(mr, 2));
             }
         });
-
-        JScrollPane scroll = new JScrollPane(progTable);
-        scroll.setBorder(BorderFactory.createEmptyBorder()); scroll.getViewport().setBackground(SURFACE);
-
-        JButton addBtn    = accentButton("Add");
-        JButton deleteBtn = ghostButton("Delete");
-        JButton closeBtn  = ghostButton("Close");
-        JPanel btnPanel   = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 10));
-        btnPanel.setBackground(BG); btnPanel.setBorder(new MatteBorder(1, 0, 0, 0, BORDER_COL));
-        btnPanel.add(addBtn); btnPanel.add(deleteBtn); btnPanel.add(closeBtn);
 
         addBtn.addActionListener(e -> {
             Object sel = collegeCombo.getSelectedItem();
@@ -1020,23 +1133,137 @@ public class Studentinfosystem extends JFrame {
                 PreparedStatement ps = conn.prepareStatement("INSERT INTO program (college,code,name) VALUES (?,?,?)");
                 ps.setString(1, collegeCode); ps.setString(2, code); ps.setString(3, pname); ps.executeUpdate();
                 progModel.addRow(new Program(collegeCode, code, pname).toArray());
-                codeField.setText(""); nameField.setText("");
+                codeField.setText(""); nameField.setText(""); selectedProgCode[0] = "";
                 loadProgramChoices();
             } catch (SQLException ex) { JOptionPane.showMessageDialog(dialog, "Error: " + ex.getMessage()); }
+        });
+
+        editProgBtn.addActionListener(e -> {
+            String oldCode = selectedProgCode[0];
+            if (oldCode.isEmpty()) { JOptionPane.showMessageDialog(dialog, "Select a program to edit first."); return; }
+
+            String currentName    = nameField.getText().trim();
+            Object currentCollSel = collegeCombo.getSelectedItem();
+            String currentCollCode = currentCollSel != null ? currentCollSel.toString().split(" - ")[0] : "";
+
+            // Build edit popup — same style as Edit Student
+            JDialog editDialog = new JDialog(dialog, "Edit Program — " + oldCode, true);
+            editDialog.setSize(420, 280);
+            editDialog.setResizable(false);
+            editDialog.setLocationRelativeTo(dialog);
+            editDialog.setLayout(new BorderLayout());
+            editDialog.getContentPane().setBackground(BG);
+
+            JPanel editHeader = new JPanel(new BorderLayout());
+            editHeader.setBackground(ACCENT);
+            editHeader.setBorder(BorderFactory.createEmptyBorder(10, 18, 10, 18));
+            JLabel editHeaderLbl = new JLabel("Editing Program: " + oldCode);
+            editHeaderLbl.setFont(FONT_BTN);
+            editHeaderLbl.setForeground(Color.WHITE);
+            editHeader.add(editHeaderLbl, BorderLayout.WEST);
+
+            JTextField dCode = styledField();
+            JTextField dName = styledField();
+            JComboBox<String> dCollege = styledCombo();
+            for (College c : readColleges())
+                dCollege.addItem(c.getCode() + " - " + c.getName());
+            dCode.setText(oldCode);
+            dName.setText(currentName);
+            for (int i = 0; i < dCollege.getItemCount(); i++)
+                if (dCollege.getItemAt(i).startsWith(currentCollCode)) { dCollege.setSelectedIndex(i); break; }
+
+            JPanel editGrid = new JPanel(new GridBagLayout());
+            editGrid.setBackground(SURFACE);
+            editGrid.setBorder(BorderFactory.createEmptyBorder(16, 24, 16, 24));
+            GridBagConstraints egbc = new GridBagConstraints();
+            egbc.insets = new Insets(6, 6, 6, 6);
+            egbc.fill = GridBagConstraints.HORIZONTAL;
+            egbc.anchor = GridBagConstraints.WEST;
+
+            egbc.gridx = 0; egbc.weightx = 0;
+            egbc.gridy = 0; editGrid.add(styledLabel("Program Code"), egbc);
+            egbc.gridy = 1; editGrid.add(styledLabel("Program Name"), egbc);
+            egbc.gridy = 2; editGrid.add(styledLabel("College"),      egbc);
+            egbc.gridx = 1; egbc.weightx = 1.0;
+            egbc.gridy = 0; editGrid.add(dCode,    egbc);
+            egbc.gridy = 1; editGrid.add(dName,    egbc);
+            egbc.gridy = 2; editGrid.add(dCollege, egbc);
+
+            JButton saveBtn   = accentButton("Save");
+            JButton cancelBtn = ghostButton("Cancel");
+            JPanel editBtnPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 10));
+            editBtnPanel.setBackground(BG);
+            editBtnPanel.setBorder(new MatteBorder(1, 0, 0, 0, BORDER_COL));
+            editBtnPanel.add(saveBtn); editBtnPanel.add(cancelBtn);
+
+            saveBtn.addActionListener(ev -> {
+                String newCode = dCode.getText().trim().toUpperCase();
+                String newName = dName.getText().trim();
+                Object collSel = dCollege.getSelectedItem();
+                if (collSel == null) { JOptionPane.showMessageDialog(editDialog, "Please select a college."); return; }
+                String collegeCode = collSel.toString().split(" - ")[0];
+                if (newCode.isEmpty() || newName.isEmpty()) { JOptionPane.showMessageDialog(editDialog, "Please fill in all fields."); return; }
+                if (!newCode.matches("[A-Z]+")) { JOptionPane.showMessageDialog(editDialog, "Program Code must contain letters only!"); return; }
+                if (newCode.length() < 2 || newCode.length() > 10) { JOptionPane.showMessageDialog(editDialog, "Program Code must be 2–10 letters long!"); return; }
+                if (!newName.matches("[a-zA-Z ]+")) { JOptionPane.showMessageDialog(editDialog, "Program Name must contain letters only!"); return; }
+                if (newName.trim().length() < 5) { JOptionPane.showMessageDialog(editDialog, "Program Name is too short!"); return; }
+                if (!newCode.equals(oldCode)) {
+                    try (Connection conn = DatabaseManager.getConnection()) {
+                        PreparedStatement chk = conn.prepareStatement("SELECT code FROM program WHERE code=?");
+                        chk.setString(1, newCode);
+                        if (chk.executeQuery().next()) { JOptionPane.showMessageDialog(editDialog, "Program code already exists!"); return; }
+                    } catch (SQLException ex) { JOptionPane.showMessageDialog(editDialog, "Error: " + ex.getMessage()); return; }
+                }
+                try (Connection conn = DatabaseManager.getConnection()) {
+                    conn.createStatement().execute("PRAGMA foreign_keys = OFF");
+                    conn.setAutoCommit(false);
+                    PreparedStatement updStudents = conn.prepareStatement(
+                        "UPDATE student SET program=?, college=? WHERE program=?");
+                    updStudents.setString(1, newCode); updStudents.setString(2, collegeCode);
+                    updStudents.setString(3, oldCode); updStudents.executeUpdate();
+                    PreparedStatement updProg = conn.prepareStatement(
+                        "UPDATE program SET code=?, name=?, college=? WHERE code=?");
+                    updProg.setString(1, newCode); updProg.setString(2, newName);
+                    updProg.setString(3, collegeCode); updProg.setString(4, oldCode); updProg.executeUpdate();
+                    conn.commit();
+                    conn.setAutoCommit(true);
+                    conn.createStatement().execute("PRAGMA foreign_keys = ON");
+                    progModel.setRowCount(0);
+                    for (Program p : readPrograms()) progModel.addRow(p.toArray());
+                    codeField.setText(""); nameField.setText(""); selectedProgCode[0] = "";
+                    loadProgramChoices();
+                    loadStudents();
+                    editDialog.dispose();
+                    JOptionPane.showMessageDialog(dialog, "Program updated successfully!");
+                } catch (SQLException ex) { JOptionPane.showMessageDialog(editDialog, "Error: " + ex.getMessage()); }
+            });
+
+            cancelBtn.addActionListener(ev -> editDialog.dispose());
+            editDialog.add(editHeader,   BorderLayout.NORTH);
+            editDialog.add(editGrid,     BorderLayout.CENTER);
+            editDialog.add(editBtnPanel, BorderLayout.SOUTH);
+            editDialog.setVisible(true);
         });
 
         deleteBtn.addActionListener(e -> {
             String code = codeField.getText().trim().toUpperCase();
             if (code.isEmpty()) { JOptionPane.showMessageDialog(dialog, "Select a program to delete."); return; }
-            int confirm = JOptionPane.showConfirmDialog(dialog, "Delete program " + code + "?", "Confirm", JOptionPane.YES_NO_OPTION);
+            int confirm = JOptionPane.showConfirmDialog(dialog,
+                "Delete program " + code + "?\nStudents enrolled in this program will be set to NOT ENROLLED.",
+                "Confirm", JOptionPane.YES_NO_OPTION);
             if (confirm != JOptionPane.YES_OPTION) return;
             try (Connection conn = DatabaseManager.getConnection()) {
+                // Null out program and college on all students under this program
+                PreparedStatement nullStudents = conn.prepareStatement(
+                    "UPDATE student SET program=NULL, college=NULL WHERE program=?");
+                nullStudents.setString(1, code); nullStudents.executeUpdate();
                 PreparedStatement ps = conn.prepareStatement("DELETE FROM program WHERE code=?");
                 ps.setString(1, code); ps.executeUpdate();
                 progModel.setRowCount(0);
                 for (Program p : readPrograms()) progModel.addRow(p.toArray());
                 codeField.setText(""); nameField.setText("");
                 loadProgramChoices();
+                loadStudents();
             } catch (SQLException ex) { JOptionPane.showMessageDialog(dialog, "Error: " + ex.getMessage()); }
         });
 
