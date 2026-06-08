@@ -140,6 +140,9 @@ public class Studentinfosystem extends JFrame {
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.setBackground(SURFACE);
         table.setForeground(TEXT_DARK);
+        table.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
+        table.getTableHeader().setReorderingAllowed(false);
+        table.getTableHeader().setResizingAllowed(false);
 
         //Alternate row colors
         table.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
@@ -166,6 +169,11 @@ public class Studentinfosystem extends JFrame {
         ((DefaultTableCellRenderer) header.getDefaultRenderer())
             .setHorizontalAlignment(SwingConstants.LEFT);
 
+        // Proportional column widths: ID, First, Last, Program, College, Year, Gender
+        int[] colWidths = {110, 120, 120, 130, 100, 70, 80};
+        for (int i = 0; i < colWidths.length; i++)
+            table.getColumnModel().getColumn(i).setPreferredWidth(colWidths[i]);
+
         //Selecting row fills form
         table.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting() && table.getSelectedRow() != -1)
@@ -175,6 +183,20 @@ public class Studentinfosystem extends JFrame {
         JScrollPane scroll = new JScrollPane(table);
         scroll.setBorder(new LineBorder(BORDER_COL, 1, true));
         scroll.getViewport().setBackground(SURFACE);
+        table.setFillsViewportHeight(true);
+
+        // Stretch rows to fill empty vertical space
+        scroll.getViewport().addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                int viewportHeight = scroll.getViewport().getHeight();
+                int rowCount = table.getRowCount();
+                if (rowCount <= 0) return;
+                int minRowHeight = 30;
+                int calculated = viewportHeight / rowCount;
+                table.setRowHeight(Math.max(minRowHeight, calculated));
+            }
+        });
 
         searchField = new JTextField();
         searchField.setFont(FONT_FIELD);
@@ -631,6 +653,15 @@ public class Studentinfosystem extends JFrame {
     }
 });
         updatePaginationBar();
+        // Recalculate row heights to fill viewport
+        SwingUtilities.invokeLater(() -> {
+            int viewportHeight = table.getParent() != null ? table.getParent().getHeight() : 0;
+            int rowCount = table.getRowCount();
+            if (rowCount > 0 && viewportHeight > 0) {
+                int calculated = viewportHeight / rowCount;
+                table.setRowHeight(Math.max(30, calculated));
+            }
+        });
     }
 
 //CRUD: Students
