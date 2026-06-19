@@ -57,7 +57,7 @@ public class Studentinfosystem extends JFrame {
             bar.setBackground(ACCENT);
             bar.setBorder(BorderFactory.createEmptyBorder(14, 24, 14, 24));
 
-        JLabel title = new JLabel("Student Information System");
+        JLabel title = new JLabel("Student Information System Version 2");
             title.setFont(FONT_TITLE);
             title.setForeground(Color.WHITE);
 
@@ -363,7 +363,7 @@ public class Studentinfosystem extends JFrame {
 
 //Constructor
     public Studentinfosystem() {
-        setTitle("Student Information System");
+        setTitle("Student Information System Version 2");
         setSize(1100, 660);
         setMinimumSize(new Dimension(900, 580));
         setDefaultCloseOperation(EXIT_ON_CLOSE);
@@ -864,7 +864,7 @@ public class Studentinfosystem extends JFrame {
 //Manage Colleges Dialog
     private void openCollegeManager() {
         JDialog dialog = new JDialog(this, "College Manager", true);
-        dialog.setSize(480, 360);
+        dialog.setSize(480, 400);
         dialog.setLocationRelativeTo(this);
         dialog.setLayout(new BorderLayout());
         dialog.getContentPane().setBackground(BG);
@@ -899,9 +899,59 @@ public class Studentinfosystem extends JFrame {
 
         for (College c : readColleges()) collModel.addRow(c.toArray());
 
+        TableRowSorter<DefaultTableModel> collSorter = new TableRowSorter<>(collModel);
+        collTable.setRowSorter(collSorter);
+
+        JTextField collSearchField = styledField();
+        isProgrammaticChange = true;
+        collSearchField.setText("Search colleges...");
+        collSearchField.setForeground(TEXT_MUTED);
+        isProgrammaticChange = false;
+        collSearchField.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override public void focusGained(java.awt.event.FocusEvent e) {
+                if (collSearchField.getText().equals("Search colleges...")) {
+                    isProgrammaticChange = true;
+                    collSearchField.setText("");
+                    isProgrammaticChange = false;
+                    collSearchField.setForeground(TEXT_DARK);
+                }
+            }
+            @Override public void focusLost(java.awt.event.FocusEvent e) {
+                if (collSearchField.getText().trim().isEmpty()) {
+                    isProgrammaticChange = true;
+                    collSearchField.setText("Search colleges...");
+                    isProgrammaticChange = false;
+                    collSearchField.setForeground(TEXT_MUTED);
+                    collSorter.setRowFilter(null);
+                }
+            }
+        });
+        collSearchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            void filter() {
+                if (isProgrammaticChange) return;
+                String text = collSearchField.getText().trim();
+                if (text.isEmpty()) { collSorter.setRowFilter(null); return; }
+                collSorter.setRowFilter(RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(text)));
+            }
+            public void insertUpdate(javax.swing.event.DocumentEvent e)  { filter(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e)  { filter(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { filter(); }
+        });
+
+        JPanel collSearchRow = new JPanel(new BorderLayout(8, 0));
+        collSearchRow.setBackground(BG);
+        collSearchRow.setBorder(BorderFactory.createEmptyBorder(8, 16, 8, 16));
+        collSearchRow.add(styledLabel("Search:"), BorderLayout.WEST);
+        collSearchRow.add(collSearchField, BorderLayout.CENTER);
+
         JScrollPane scroll = new JScrollPane(collTable);
         scroll.setBorder(BorderFactory.createEmptyBorder());
         scroll.getViewport().setBackground(SURFACE);
+
+        JPanel collCenterPanel = new JPanel(new BorderLayout());
+        collCenterPanel.setBackground(BG);
+        collCenterPanel.add(collSearchRow, BorderLayout.NORTH);
+        collCenterPanel.add(scroll, BorderLayout.CENTER);
 
         JButton addBtn    = accentButton("Add");
         JButton editBtn   = accentButton("Edit");
@@ -1070,14 +1120,14 @@ public class Studentinfosystem extends JFrame {
         });
 
         closeBtn.addActionListener(e -> dialog.dispose());
-        dialog.add(form, BorderLayout.NORTH); dialog.add(scroll, BorderLayout.CENTER); dialog.add(btnPanel, BorderLayout.SOUTH);
+        dialog.add(form, BorderLayout.NORTH); dialog.add(collCenterPanel, BorderLayout.CENTER); dialog.add(btnPanel, BorderLayout.SOUTH);
         dialog.setVisible(true);
     }
 
 //Manage Programs Dialog
     private void openProgramManager() {
         JDialog dialog = new JDialog(this, "Program Manager", true);
-        dialog.setSize(580, 400);
+        dialog.setSize(580, 440);
         dialog.setLocationRelativeTo(this);
         dialog.setLayout(new BorderLayout());
         dialog.getContentPane().setBackground(BG);
@@ -1120,8 +1170,58 @@ public class Studentinfosystem extends JFrame {
 
         for (Program p : readPrograms()) progModel.addRow(p.toArray());
 
+        TableRowSorter<DefaultTableModel> progSorter = new TableRowSorter<>(progModel);
+        progTable.setRowSorter(progSorter);
+
+        JTextField progSearchField = styledField();
+        isProgrammaticChange = true;
+        progSearchField.setText("Search programs...");
+        progSearchField.setForeground(TEXT_MUTED);
+        isProgrammaticChange = false;
+        progSearchField.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override public void focusGained(java.awt.event.FocusEvent e) {
+                if (progSearchField.getText().equals("Search programs...")) {
+                    isProgrammaticChange = true;
+                    progSearchField.setText("");
+                    isProgrammaticChange = false;
+                    progSearchField.setForeground(TEXT_DARK);
+                }
+            }
+            @Override public void focusLost(java.awt.event.FocusEvent e) {
+                if (progSearchField.getText().trim().isEmpty()) {
+                    isProgrammaticChange = true;
+                    progSearchField.setText("Search programs...");
+                    isProgrammaticChange = false;
+                    progSearchField.setForeground(TEXT_MUTED);
+                    progSorter.setRowFilter(null);
+                }
+            }
+        });
+        progSearchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            void filter() {
+                if (isProgrammaticChange) return;
+                String text = progSearchField.getText().trim();
+                if (text.isEmpty()) { progSorter.setRowFilter(null); return; }
+                progSorter.setRowFilter(RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(text)));
+            }
+            public void insertUpdate(javax.swing.event.DocumentEvent e)  { filter(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e)  { filter(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { filter(); }
+        });
+
+        JPanel progSearchRow = new JPanel(new BorderLayout(8, 0));
+        progSearchRow.setBackground(BG);
+        progSearchRow.setBorder(BorderFactory.createEmptyBorder(8, 16, 8, 16));
+        progSearchRow.add(styledLabel("Search:"), BorderLayout.WEST);
+        progSearchRow.add(progSearchField, BorderLayout.CENTER);
+
         JScrollPane scroll = new JScrollPane(progTable);
         scroll.setBorder(BorderFactory.createEmptyBorder()); scroll.getViewport().setBackground(SURFACE);
+
+        JPanel progCenterPanel = new JPanel(new BorderLayout());
+        progCenterPanel.setBackground(BG);
+        progCenterPanel.add(progSearchRow, BorderLayout.NORTH);
+        progCenterPanel.add(scroll, BorderLayout.CENTER);
 
         JButton addBtn    = accentButton("Add");
         JButton editProgBtn = accentButton("Edit");
@@ -1299,7 +1399,7 @@ public class Studentinfosystem extends JFrame {
         });
 
         closeBtn.addActionListener(e -> dialog.dispose());
-        dialog.add(form, BorderLayout.NORTH); dialog.add(scroll, BorderLayout.CENTER); dialog.add(btnPanel, BorderLayout.SOUTH);
+        dialog.add(form, BorderLayout.NORTH); dialog.add(progCenterPanel, BorderLayout.CENTER); dialog.add(btnPanel, BorderLayout.SOUTH);
         dialog.setVisible(true);
     }
 
