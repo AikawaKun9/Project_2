@@ -29,7 +29,7 @@ public class DatabaseManager {
                 "CREATE TABLE IF NOT EXISTS program (" +
                 "  code    TEXT PRIMARY KEY," +
                 "  name    TEXT NOT NULL," +
-                "  college TEXT NOT NULL," +
+                "  college TEXT," +
                 "  FOREIGN KEY (college) REFERENCES college(code)" +
                 ")"
             );
@@ -45,6 +45,30 @@ public class DatabaseManager {
                 "  FOREIGN KEY (program) REFERENCES program(code)" +
                 ")"
             );
+
+            // Migration: allow NULL on program.college for existing DBs created with NOT NULL
+            // SQLite doesn't support ALTER COLUMN, so we recreate the table if needed
+            ResultSet pragmaRs = st.executeQuery("PRAGMA table_info(program)");
+            boolean collegeIsNotNull = false;
+            while (pragmaRs.next()) {
+                if ("college".equals(pragmaRs.getString("name")) && pragmaRs.getInt("notnull") == 1) {
+                    collegeIsNotNull = true; break;
+                }
+            }
+            if (collegeIsNotNull) {
+                st.executeUpdate("ALTER TABLE program RENAME TO program_old");
+                st.executeUpdate(
+                    "CREATE TABLE program (" +
+                    "  code    TEXT PRIMARY KEY," +
+                    "  name    TEXT NOT NULL," +
+                    "  college TEXT," +
+                    "  FOREIGN KEY (college) REFERENCES college(code)" +
+                    ")"
+                );
+                st.executeUpdate("INSERT INTO program SELECT code, name, college FROM program_old");
+                st.executeUpdate("DROP TABLE program_old");
+                st.executeUpdate("CREATE INDEX IF NOT EXISTS idx_program_college ON program(college)");
+            }
 
             // Indexes for faster search and sort on 5000 rows
             st.executeUpdate("CREATE INDEX IF NOT EXISTS idx_student_lastname  ON student(lastname)");
