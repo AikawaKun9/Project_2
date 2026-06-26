@@ -1,5 +1,4 @@
 import java.awt.*;
-import java.awt.event.*;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -343,7 +342,17 @@ public class Studentinfosystem extends JFrame {
         addBtn.addActionListener(e -> addStudent());
         updateBtn.addActionListener(e -> updateStudent());
         deleteBtn.addActionListener(e -> deleteStudent());
-        refreshBtn.addActionListener(e -> { currentPage = 1; loadStudents(); });
+        refreshBtn.addActionListener(e -> {
+            searchKeyword = "";
+            currentPage = 1;
+            if (searchField != null) {
+                isProgrammaticChange = true;
+                searchField.setText("Search students...");
+                isProgrammaticChange = false;
+                searchField.setForeground(TEXT_MUTED);
+            }
+            loadStudents();
+        });
         programBtn.addActionListener(e -> openProgramManager());
         collegeBtn.addActionListener(e -> openCollegeManager());
 
@@ -551,8 +560,6 @@ public class Studentinfosystem extends JFrame {
             return "Year in ID must be between 2000 and 2099!";
         if (!getNameField().matches("[a-zA-Z ]+") || !getSurnameField().matches("[a-zA-Z ]+"))
             return "Name fields must contain letters only!";
-        if (getNameField().trim().isEmpty() || getSurnameField().trim().isEmpty())
-            return "Name fields cannot be blank!";
         if (getNameField().trim().length() < 2 || getSurnameField().trim().length() < 2)
             return "Names must be at least 2 characters long!";
         if (!getYearField().matches("[1-5]"))
@@ -569,8 +576,10 @@ public class Studentinfosystem extends JFrame {
              PreparedStatement ps = conn.prepareStatement(
                  "SELECT college, code, name FROM program ORDER BY code ASC");
              ResultSet rs = ps.executeQuery()) {
-            while (rs.next())
-                list.add(new Program(rs.getString("college"), rs.getString("code"), rs.getString("name")));
+            while (rs.next()) {
+                String col = rs.getString("college");
+                list.add(new Program(col != null ? col : "", rs.getString("code"), rs.getString("name")));
+            }
         } catch (SQLException e) { e.printStackTrace(); }
         return list;
     }
@@ -709,8 +718,10 @@ public class Studentinfosystem extends JFrame {
                 target.setId(rs.getString("id"));
                 target.setFirstName(rs.getString("firstname"));
                 target.setLastName(rs.getString("lastname"));
-                target.setProgram(rs.getString("program"));
-                target.setCollege(rs.getString("college"));
+                String dbProgram = rs.getString("program");
+                if (dbProgram != null) target.setProgram(dbProgram);
+                String dbCollege = rs.getString("college");
+                if (dbCollege != null) target.setCollege(dbCollege);
                 target.setYearLevel(rs.getString("year"));
                 target.setGender(rs.getString("gender"));
             }
@@ -749,10 +760,12 @@ public class Studentinfosystem extends JFrame {
         dLast.setText(target.getLastName());
         dYear.setText(target.getYearLevel());
         dGender.setText(target.getGender());
-        for (int i = 0; i < dProgram.getItemCount(); i++)
-            if (dProgram.getItemAt(i).startsWith(target.getProgram())) {
-                dProgram.setSelectedIndex(i); break;
-            }
+        if (target.getProgram() != null && !target.getProgram().isEmpty()) {
+            for (int i = 0; i < dProgram.getItemCount(); i++)
+                if (dProgram.getItemAt(i).startsWith(target.getProgram())) {
+                    dProgram.setSelectedIndex(i); break;
+                }
+        }
 
         JPanel grid = new JPanel(new GridBagLayout());
         grid.setBackground(SURFACE);
@@ -864,7 +877,7 @@ public class Studentinfosystem extends JFrame {
 //Manage Colleges Dialog
     private void openCollegeManager() {
         JDialog dialog = new JDialog(this, "College Manager", true);
-        dialog.setSize(480, 400);
+        dialog.setSize(650, 500);
         dialog.setLocationRelativeTo(this);
         dialog.setLayout(new BorderLayout());
         dialog.getContentPane().setBackground(BG);
@@ -956,11 +969,12 @@ public class Studentinfosystem extends JFrame {
         JButton addBtn    = accentButton("Add");
         JButton editBtn   = accentButton("Edit");
         JButton deleteBtn = ghostButton("Delete");
+        JButton refreshCollBtn = ghostButton("Refresh");
         JButton closeBtn  = ghostButton("Close");
         JPanel btnPanel   = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 10));
         btnPanel.setBackground(BG);
         btnPanel.setBorder(new MatteBorder(1, 0, 0, 0, BORDER_COL));
-        btnPanel.add(addBtn); btnPanel.add(editBtn); btnPanel.add(deleteBtn); btnPanel.add(closeBtn);
+        btnPanel.add(addBtn); btnPanel.add(editBtn); btnPanel.add(deleteBtn); btnPanel.add(refreshCollBtn); btnPanel.add(closeBtn);
 
         // Track which college code was selected from the table
         final String[] selectedCollegeCode = {""};
@@ -972,6 +986,18 @@ public class Studentinfosystem extends JFrame {
                 codeField.setText(selectedCollegeCode[0]);
                 nameField.setText((String) collModel.getValueAt(mr, 1));
             }
+        });
+
+        refreshCollBtn.addActionListener(e -> {
+            collModel.setRowCount(0);
+            for (College c : readColleges()) collModel.addRow(c.toArray());
+            codeField.setText(""); nameField.setText(""); selectedCollegeCode[0] = "";
+            collTable.clearSelection();
+            isProgrammaticChange = true;
+            collSearchField.setText("Search colleges...");
+            collSearchField.setForeground(TEXT_MUTED);
+            isProgrammaticChange = false;
+            collSorter.setRowFilter(null);
         });
 
         addBtn.addActionListener(e -> {
@@ -1091,20 +1117,20 @@ public class Studentinfosystem extends JFrame {
             String code = codeField.getText().trim().toUpperCase();
             if (code.isEmpty()) { JOptionPane.showMessageDialog(dialog, "Select a college to delete."); return; }
             int confirm = JOptionPane.showConfirmDialog(dialog,
-                "Delete college " + code + "?\nAll programs under it will be deleted.\nStudents in those programs will be set to NOT ENROLLED.",
+                "Delete college " + code + "?\nPrograms under it will remain but show N/A for college.\nStudents will keep their program but show N/A for college.",
                 "Confirm", JOptionPane.YES_NO_OPTION);
             if (confirm != JOptionPane.YES_OPTION) return;
             try (Connection conn = DatabaseManager.getConnection()) {
                 conn.createStatement().execute("PRAGMA foreign_keys = OFF");
                 conn.setAutoCommit(false);
-                // 1. Null out program+college on students under this college
-                PreparedStatement nullStudents = conn.prepareStatement(
-                    "UPDATE student SET program=NULL, college=NULL WHERE college=?");
-                nullStudents.setString(1, code); nullStudents.executeUpdate();
-                // 2. Delete programs under this college (can't set college=NULL, it's NOT NULL)
-                PreparedStatement delPrograms = conn.prepareStatement(
-                    "DELETE FROM program WHERE college=?");
-                delPrograms.setString(1, code); delPrograms.executeUpdate();
+                // 1. Null out only the college column on affected students (keep their program)
+                PreparedStatement nullStudentCollege = conn.prepareStatement(
+                    "UPDATE student SET college=NULL WHERE college=?");
+                nullStudentCollege.setString(1, code); nullStudentCollege.executeUpdate();
+                // 2. Null out the college reference on programs (keep the programs themselves)
+                PreparedStatement orphanPrograms = conn.prepareStatement(
+                    "UPDATE program SET college=NULL WHERE college=?");
+                orphanPrograms.setString(1, code); orphanPrograms.executeUpdate();
                 // 3. Delete the college itself
                 PreparedStatement delCollege = conn.prepareStatement(
                     "DELETE FROM college WHERE code=?");
@@ -1127,7 +1153,7 @@ public class Studentinfosystem extends JFrame {
 //Manage Programs Dialog
     private void openProgramManager() {
         JDialog dialog = new JDialog(this, "Program Manager", true);
-        dialog.setSize(580, 440);
+        dialog.setSize(680, 520);
         dialog.setLocationRelativeTo(this);
         dialog.setLayout(new BorderLayout());
         dialog.getContentPane().setBackground(BG);
@@ -1226,10 +1252,11 @@ public class Studentinfosystem extends JFrame {
         JButton addBtn    = accentButton("Add");
         JButton editProgBtn = accentButton("Edit");
         JButton deleteBtn = ghostButton("Delete");
+        JButton refreshProgBtn = ghostButton("Refresh");
         JButton closeBtn  = ghostButton("Close");
         JPanel btnPanel   = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 10));
         btnPanel.setBackground(BG); btnPanel.setBorder(new MatteBorder(1, 0, 0, 0, BORDER_COL));
-        btnPanel.add(addBtn); btnPanel.add(editProgBtn); btnPanel.add(deleteBtn); btnPanel.add(closeBtn);
+        btnPanel.add(addBtn); btnPanel.add(editProgBtn); btnPanel.add(deleteBtn); btnPanel.add(refreshProgBtn); btnPanel.add(closeBtn);
 
         final String[] selectedProgCode = {""};
         progTable.getSelectionModel().addListSelectionListener(e -> {
@@ -1243,6 +1270,19 @@ public class Studentinfosystem extends JFrame {
                 codeField.setText(selectedProgCode[0]);
                 nameField.setText((String) progModel.getValueAt(mr, 2));
             }
+        });
+
+        refreshProgBtn.addActionListener(e -> {
+            progModel.setRowCount(0);
+            for (Program p : readPrograms()) progModel.addRow(p.toArray());
+            codeField.setText(""); nameField.setText(""); selectedProgCode[0] = "";
+            progTable.clearSelection();
+            if (collegeCombo.getItemCount() > 0) collegeCombo.setSelectedIndex(0);
+            isProgrammaticChange = true;
+            progSearchField.setText("Search programs...");
+            progSearchField.setForeground(TEXT_MUTED);
+            isProgrammaticChange = false;
+            progSorter.setRowFilter(null);
         });
 
         addBtn.addActionListener(e -> {
