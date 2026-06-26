@@ -19,7 +19,10 @@ public class Program {
     public void setCode(String code)      {this.code = code.toUpperCase();}
     public void setName(String name)      {this.name = name;}
 
-    public String[] toArray()             {return new String[]{college, code, name };}
+    public String[] toArray() {
+        String displayCollege = (college == null || college.isEmpty()) ? "N/A" : college;
+        return new String[]{displayCollege, code, name};
+    }
 
     public static Program fromArray(String[] data) {
         if (data.length < 3) return null;
